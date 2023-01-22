@@ -16,8 +16,13 @@
  * processing a request
  *
  */
+import { initTRPC } from "@trpc/server";
+import superjson from "superjson";
 import { type CreateNextContextOptions } from "@trpc/server/adapters/next";
-
+import { StringSession } from "telegram/sessions";
+import { TelegramClient } from "telegram";
+import { pb } from "../db/client";
+import { env } from "../../env/server.mjs";
 /**
  * Replace this with an object if you want to pass things to createContextInner
  */
@@ -33,7 +38,9 @@ type CreateContextOptions = Record<string, never>;
  * @see https://create.t3.gg/en/usage/trpc#-servertrpccontextts
  */
 const createInnerTRPCContext = (_opts: CreateContextOptions) => {
-  return {};
+  return {
+    pb,
+  };
 };
 
 /**
@@ -51,8 +58,6 @@ export const createTRPCContext = (_opts: CreateNextContextOptions) => {
  * This is where the trpc api is initialized, connecting the context and
  * transformer
  */
-import { initTRPC } from "@trpc/server";
-import superjson from "superjson";
 
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
@@ -82,3 +87,14 @@ export const createTRPCRouter = t.router;
  * can still access user session data if they are logged in
  */
 export const publicProcedure = t.procedure;
+
+export const tgMiddleware = t.middleware(({ next }) => {
+  const session = new StringSession("");
+  const tg = new TelegramClient(session, env.API_ID, env.API_HASH, {
+    connectionRetries: 5,
+    useWSS: false,
+  });
+  return next({
+    ctx: { tg: tg },
+  });
+});
